@@ -1,18 +1,43 @@
 type BaseNumType = u64;
-type CompositeUnit = Vec<BaseNumType>;
 
-// impl CompositeUnit {
-//     fn zero_out_after(&mut self, idx: usize) {
-//         for let i in idx..self.len() {
-//             self[i] = 0;
-//         }
-//     }
-// }
+
+//type CompositeUnit = Vec<BaseNumType>;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Sign {
+    Positive,
+    Negative,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CompositeUnit {
+    values: Vec<BaseNumType>,
+    sign: Sign,
+}
+
+impl CompositeUnit {
+    fn new() -> Self {
+        Self {
+            values: Vec::new(),
+            sign: Sign::Positive,
+        }
+    }
+    fn zero_out_after(&mut self, idx: usize) {
+        for i in idx..self.values.len() {
+            self.values[i] = 0;
+        }
+    }
+    fn radix_floor_unit(&mut self, unit_index: usize, radix: BaseNumType) {
+            self.values[unit_index] = radix_floor(self.values[unit_index], radix);
+    }
+    fn iter_big_to_small(&self) -> impl Iterator<Item = &BaseNumType> {
+        return self.values.iter();
+    } 
+}
 
 #[derive(Clone)]
 struct Unit{
     name: &'static str,
-    tick_base: CompositeUnit,
+    tick_base: Vec<BaseNumType>,
     fmt_fn: Option<fn(CompositeUnit) -> String>,
     size: BaseNumType,
 }
@@ -22,7 +47,7 @@ struct UnitBuilder<'a>{
     name: &'static str,
     scale_builder: &'a ScaleBuilder,
     size: BaseNumType,
-    tick_base: CompositeUnit,
+    tick_base: Vec<BaseNumType>,
     fmt_fn: Option<fn(CompositeUnit) -> String>,
 }
 
@@ -61,7 +86,7 @@ impl<'a> UnitBuilder<'a>{
         };
         self
     }
-    fn tick_base (&mut self, tick_base: CompositeUnit) -> &mut Self {
+    fn tick_base (&mut self, tick_base: Vec<BaseNumType>) -> &mut Self {
         self.tick_base = tick_base;
         self
     }
@@ -186,12 +211,12 @@ impl Scale{
         if let Some(to_composite) = self.to_unit_counts_fn {
             return to_composite(value);
         }
-        let mut result: CompositeUnit = Vec::new();
+        let mut result = CompositeUnit::new();
         let mut value = value.clone();
         for unit in self.units_big_to_small() {
             let n = value / unit.size;
             value -= unit.size * n;
-            result.push(n);
+            result.values.push(n);
         }
         return result;
     }
@@ -201,14 +226,14 @@ impl Scale{
             return from_composite(composite_unit);
         }
         let mut result: BaseNumType = 0;
-        for (unit, value) in self.units_big_to_small().zip(composite_unit.iter()) {
+        for (unit, value) in self.units_big_to_small().zip(composite_unit.iter_big_to_small()) {
             result += unit.size * *value;
         }
         return Ok(result);
     }
     fn fmt_composite(&self, composite_unit: &CompositeUnit) -> String {
         let mut result = String::new();
-        for (unit, value) in self.units_big_to_small().zip(composite_unit.iter()) {
+        for (unit, value) in self.units_big_to_small().zip(composite_unit.iter_big_to_small()) {
             if *value == 0 {
                 continue;
             }
@@ -231,19 +256,16 @@ impl Scale{
     }
     fn increment_unit(&self, composite_unit: &CompositeUnit, unit_index: usize, radix: BaseNumType) -> CompositeUnit{
         let mut composite = composite_unit.clone();
-        // TODO: use the method
-        for i in (unit_index+1)..composite_unit.len() {
-            composite[i] = 0;
-        }
+        composite.zero_out_after(unit_index+1);
         let mut current_unit_index = unit_index;
-        composite[current_unit_index] += radix;
+        composite.values[current_unit_index] += radix;
         loop{
             if self.is_unit_counts_canonical(&composite) {
                 break;
             }
-            composite[current_unit_index] = 0;
+            composite.values[current_unit_index] = 0;
             current_unit_index -= 1;
-            composite[current_unit_index] += 1;
+            composite.values[current_unit_index] += 1;
         }
         return composite;
     }
@@ -279,19 +301,19 @@ impl Scale{
             labels: Vec::new(),
             aux_labels: Vec::new(),
         };
-        composite[tick_unit_index] = radix_floor(composite[tick_unit_index], radix);
-        // composite.zero_out_after(tick_unit_index + 1);
-        if composite == composite_start {
-
+        composite.radix_floor_unit(tick_unit_index, radix);
+        composite.zero_out_after(tick_unit_index + 1);
+        if composite != composite_start {
+            composite = self.increment_unit(&composite, tick_unit_index, radix);
         }
         loop {
-            composite = self.increment_unit(&composite, tick_unit_index, radix);
             let val = self.from_composite(&composite).unwrap();// guaranteed to be canonical by
             // increment_unit
             if val > end {
                 break;
             }
-            ticks.labels.push((self.fmt_composite(&composite), val))
+            ticks.labels.push((self.fmt_composite(&composite), val));
+            composite = self.increment_unit(&composite, tick_unit_index, radix);
         }
         return ticks;
     }
@@ -361,6 +383,10 @@ fn main() {
     println!("start: {}", scale.fmt_base_unit(300000000000000000));
     println!("{:?}", scale.ticks(300000000000000000, 600000000000000000, 10));
     println!("end: {}", scale.fmt_base_unit(600000000000000000));
+
+    println!("start: {}", scale.fmt_base_unit(3000000000000000));
+    println!("{:?}", scale.ticks(3000000000000000, 6000000000000000, 10));
+    println!("end: {}", scale.fmt_base_unit(6000000000000000));
 }
 
 
