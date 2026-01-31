@@ -1,23 +1,26 @@
+type BaseNumType = u64;
+type CompositeUnit = Vec<BaseNumType>;
+
 #[derive(Clone)]
 struct Unit{
     name: &'static str,
-    tick_base: Vec<u64>,
-    fmt_fn: Option<fn(Vec<u64>) -> String>,
-    size: u64,
+    tick_base: CompositeUnit,
+    fmt_fn: Option<fn(CompositeUnit) -> String>,
+    size: BaseNumType,
 }
 
 #[derive(Clone)]
 struct UnitBuilder<'a>{
     name: &'static str,
     scale_builder: &'a ScaleBuilder,
-    size: u64,
-    tick_base: Vec<u64>,
-    fmt_fn: Option<fn(Vec<u64>) -> String>,
+    size: BaseNumType,
+    tick_base: CompositeUnit,
+    fmt_fn: Option<fn(CompositeUnit) -> String>,
 }
 
 impl<'a> UnitBuilder<'a>{
     fn new(scale_builder: &'a ScaleBuilder) -> Self{
-        let size: u64 = if let Some(last) = scale_builder.last_unit() {
+        let size: BaseNumType = if let Some(last) = scale_builder.last_unit() {
             last.size * 1000
         } else {
             1
@@ -34,7 +37,7 @@ impl<'a> UnitBuilder<'a>{
         self.name = name;
         self
     }
-    fn relative_to_last (&mut self, rscale: u64) -> &mut Self {
+    fn relative_to_last (&mut self, rscale: BaseNumType) -> &mut Self {
         self.size = if let Some(last) = self.scale_builder.last_unit() {
             last.size * rscale
         } else {
@@ -42,7 +45,7 @@ impl<'a> UnitBuilder<'a>{
         };
         self
     }
-    fn relative_to (&mut self, unit_name: &'static str, rscale: u64) -> &mut Self {
+    fn relative_to (&mut self, unit_name: &'static str, rscale: BaseNumType) -> &mut Self {
         self.size = if let Some(unit) = self.scale_builder.get_unit(unit_name) {
             unit.size * rscale
         } else {
@@ -50,7 +53,7 @@ impl<'a> UnitBuilder<'a>{
         };
         self
     }
-    fn tick_base (&mut self, tick_base: Vec<u64>) -> &mut Self {
+    fn tick_base (&mut self, tick_base: CompositeUnit) -> &mut Self {
         self.tick_base = tick_base;
         self
     }
@@ -67,9 +70,9 @@ impl<'a> UnitBuilder<'a>{
 #[derive(Clone)]
 struct ScaleBuilder{
     name: &'static str,
-    to_unit_counts_fn: Option<fn(u64) -> Vec<u64>>,
-    from_unit_counts_fn: Option<fn(&Vec<u64>) -> Result<u64, ScaleError>>,
-    fmt_fn: Option<fn(&Vec<u64>) -> String>,
+    to_unit_counts_fn: Option<fn(BaseNumType) -> CompositeUnit>,
+    from_unit_counts_fn: Option<fn(&CompositeUnit) -> Result<BaseNumType, ScaleError>>,
+    fmt_fn: Option<fn(&CompositeUnit) -> String>,
     units: Vec<Unit>,
 }
 
@@ -83,15 +86,15 @@ impl ScaleBuilder{
             units: Vec::new(),
         }
     }
-    fn to_unit_counts(&mut self, cb: fn(u64) -> Vec<u64>) -> &mut Self{
+    fn to_unit_counts(&mut self, cb: fn(BaseNumType) -> CompositeUnit) -> &mut Self{
         self.to_unit_counts_fn = Some(cb);
         self
     }
-    fn from_unit_counts(&mut self, cb: fn(&Vec<u64>) -> Result<u64, ScaleError>) -> &mut Self{
+    fn from_unit_counts(&mut self, cb: fn(&CompositeUnit) -> Result<BaseNumType, ScaleError>) -> &mut Self{
         self.from_unit_counts_fn = Some(cb);
         self
     }
-    fn fmt(&mut self, cb: fn(&Vec<u64>) -> String) -> &mut Self{
+    fn fmt(&mut self, cb: fn(&CompositeUnit) -> String) -> &mut Self{
         self.fmt_fn = Some(cb);
         self
     }
@@ -130,9 +133,9 @@ impl ScaleBuilder{
 
 struct Scale{
     name: &'static str,
-    to_unit_counts_fn: Option<fn(u64) -> Vec<u64>>,
-    from_unit_counts_fn: Option<fn(&Vec<u64>) -> Result<u64, ScaleError>>,
-    fmt_fn: Option<fn(&Vec<u64>) -> String>,
+    to_unit_counts_fn: Option<fn(BaseNumType) -> CompositeUnit>,
+    from_unit_counts_fn: Option<fn(&CompositeUnit) -> Result<BaseNumType, ScaleError>>,
+    fmt_fn: Option<fn(&CompositeUnit) -> String>,
     units: Vec<Unit>,
 }
 
@@ -153,7 +156,7 @@ impl std::fmt::Display for ScaleError {
 }
 impl std::error::Error for ScaleError{}
 
-fn radix_floor(val: u64, radix: u64) -> u64{
+fn radix_floor(val: BaseNumType, radix: BaseNumType) -> BaseNumType{
     let n = val/radix;
     return radix*n;
 }
@@ -171,11 +174,11 @@ impl Scale{
         self.units.iter().rev()
     }
     // conversion from base unit
-    fn to_unit_counts(&self, value: u64) -> Vec<u64> {
+    fn to_unit_counts(&self, value: BaseNumType) -> CompositeUnit {
         if let Some(to_unit_counts) = self.to_unit_counts_fn {
             return to_unit_counts(value);
         }
-        let mut result: Vec<u64> = Vec::new();
+        let mut result: CompositeUnit = Vec::new();
         let mut value = value.clone();
         for unit in self.units_big_to_small() {
             let n = value / unit.size;
@@ -185,17 +188,17 @@ impl Scale{
         return result;
     }
     // conversion to base units
-    fn from_unit_counts(&self, unit_counts: &Vec<u64>) -> Result<u64, ScaleError> {
+    fn from_unit_counts(&self, unit_counts: &CompositeUnit) -> Result<BaseNumType, ScaleError> {
         if let Some(from_unit_counts) = self.from_unit_counts_fn {
             return from_unit_counts(unit_counts);
         }
-        let mut result: u64 = 0;
+        let mut result: BaseNumType = 0;
         for (unit, value) in self.units_big_to_small().zip(unit_counts.iter()) {
             result += unit.size * *value;
         }
         return Ok(result);
     }
-    fn fmt(&self, unit_counts: &Vec<u64>) -> String {
+    fn fmt(&self, unit_counts: &CompositeUnit) -> String {
         let mut result = String::new();
         for (unit, value) in self.units_big_to_small().zip(unit_counts.iter()) {
             if *value == 0 {
@@ -208,14 +211,14 @@ impl Scale{
         }
         return result;
     }
-    fn is_unit_counts_canonical(&self, unit_counts: &Vec<u64>) -> bool {
+    fn is_unit_counts_canonical(&self, unit_counts: &CompositeUnit) -> bool {
         if let Ok(value) = self.from_unit_counts(unit_counts) {
             return self.to_unit_counts(value) == *unit_counts;
         } else {
             return false;
         }
     }
-    fn increment_unit(&self, unit_counts: &Vec<u64>, unit_index: usize, radix: u64) -> Vec<u64>{
+    fn increment_unit(&self, unit_counts: &CompositeUnit, unit_index: usize, radix: BaseNumType) -> CompositeUnit{
         let mut counts = unit_counts.clone();
         for i in (unit_index+1)..unit_counts.len() {
             counts[i] = 0;
@@ -232,11 +235,11 @@ impl Scale{
         }
         return counts;
     }
-    fn ticks(&self, start: u64, end: u64, max_cnt: u64) -> Ticks {
+    fn ticks(&self, start: BaseNumType, end: BaseNumType, max_cnt: usize) -> Ticks {
         if end <= start {
             panic!("ticks: end must be larger than start");
         }
-        let min_gap = (end - start) / max_cnt;
+        let min_gap = (end - start) / max_cnt as BaseNumType;
         let mut tick_unit_index = self.units.len() - 1;
         let mut tick_unit = &self.units[tick_unit_index];
         for (i, unit) in self.units_big_to_small().enumerate() {
@@ -247,7 +250,7 @@ impl Scale{
             tick_unit = unit;
             break;
         }
-        let mut radix: u64 = 1;
+        let mut radix: BaseNumType = 1;
         'outer: loop {
             let base_multiplier = radix;
             for factor in tick_unit.tick_base.clone().into_iter() {
@@ -280,8 +283,8 @@ impl Scale{
 
 #[derive(Debug)]
 struct Ticks {
-    labels: Vec<(String, u64)>,// relative ticks
-    aux_labels: Vec<(String, u64)>,// for showing full formatted unit_counts values once in a while, so the user can know the absolute location
+    labels: Vec<(String, BaseNumType)>,// relative ticks
+    aux_labels: Vec<(String, BaseNumType)>,// for showing full formatted unit_counts values once in a while, so the user can know the absolute location
 }
 
 
