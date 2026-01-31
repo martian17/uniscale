@@ -86,11 +86,11 @@ impl ScaleBuilder{
             units: Vec::new(),
         }
     }
-    fn to_unit_counts(&mut self, cb: fn(BaseNumType) -> CompositeUnit) -> &mut Self{
+    fn to_composite(&mut self, cb: fn(BaseNumType) -> CompositeUnit) -> &mut Self{
         self.to_unit_counts_fn = Some(cb);
         self
     }
-    fn from_unit_counts(&mut self, cb: fn(&CompositeUnit) -> Result<BaseNumType, ScaleError>) -> &mut Self{
+    fn from_composite(&mut self, cb: fn(&CompositeUnit) -> Result<BaseNumType, ScaleError>) -> &mut Self{
         self.from_unit_counts_fn = Some(cb);
         self
     }
@@ -174,9 +174,9 @@ impl Scale{
         self.units.iter().rev()
     }
     // conversion from base unit
-    fn to_unit_counts(&self, value: BaseNumType) -> CompositeUnit {
-        if let Some(to_unit_counts) = self.to_unit_counts_fn {
-            return to_unit_counts(value);
+    fn to_composite(&self, value: BaseNumType) -> CompositeUnit {
+        if let Some(to_composite) = self.to_unit_counts_fn {
+            return to_composite(value);
         }
         let mut result: CompositeUnit = Vec::new();
         let mut value = value.clone();
@@ -188,19 +188,19 @@ impl Scale{
         return result;
     }
     // conversion to base units
-    fn from_unit_counts(&self, unit_counts: &CompositeUnit) -> Result<BaseNumType, ScaleError> {
-        if let Some(from_unit_counts) = self.from_unit_counts_fn {
-            return from_unit_counts(unit_counts);
+    fn from_composite(&self, composite_unit: &CompositeUnit) -> Result<BaseNumType, ScaleError> {
+        if let Some(from_composite) = self.from_unit_counts_fn {
+            return from_composite(composite_unit);
         }
         let mut result: BaseNumType = 0;
-        for (unit, value) in self.units_big_to_small().zip(unit_counts.iter()) {
+        for (unit, value) in self.units_big_to_small().zip(composite_unit.iter()) {
             result += unit.size * *value;
         }
         return Ok(result);
     }
-    fn fmt(&self, unit_counts: &CompositeUnit) -> String {
+    fn fmt_composite(&self, composite_unit: &CompositeUnit) -> String {
         let mut result = String::new();
-        for (unit, value) in self.units_big_to_small().zip(unit_counts.iter()) {
+        for (unit, value) in self.units_big_to_small().zip(composite_unit.iter()) {
             if *value == 0 {
                 continue;
             }
@@ -211,16 +211,19 @@ impl Scale{
         }
         return result;
     }
-    fn is_unit_counts_canonical(&self, unit_counts: &CompositeUnit) -> bool {
-        if let Ok(value) = self.from_unit_counts(unit_counts) {
-            return self.to_unit_counts(value) == *unit_counts;
+    fn fmt_base_unit(&self, value: BaseNumType) -> String {
+        return self.fmt_composite(&self.to_composite(value));
+    }
+    fn is_unit_counts_canonical(&self, composite_unit: &CompositeUnit) -> bool {
+        if let Ok(value) = self.from_composite(composite_unit) {
+            return self.to_composite(value) == *composite_unit;
         } else {
             return false;
         }
     }
-    fn increment_unit(&self, unit_counts: &CompositeUnit, unit_index: usize, radix: BaseNumType) -> CompositeUnit{
-        let mut counts = unit_counts.clone();
-        for i in (unit_index+1)..unit_counts.len() {
+    fn increment_unit(&self, composite_unit: &CompositeUnit, unit_index: usize, radix: BaseNumType) -> CompositeUnit{
+        let mut counts = composite_unit.clone();
+        for i in (unit_index+1)..composite_unit.len() {
             counts[i] = 0;
         }
         let mut current_unit_index = unit_index;
@@ -261,7 +264,7 @@ impl Scale{
                 radix = base_multiplier * factor;
             }
         }
-        let unit_start = self.to_unit_counts(start);
+        let unit_start = self.to_composite(start);
         let mut counts = unit_start.clone();
         let mut ticks = Ticks{
             labels: Vec::new(),
@@ -270,12 +273,12 @@ impl Scale{
         counts[tick_unit_index] = radix_floor(counts[tick_unit_index], radix);
         loop {
             counts = self.increment_unit(&counts, tick_unit_index, radix);
-            let val = self.from_unit_counts(&counts).unwrap();// guaranteed to be canonical by
+            let val = self.from_composite(&counts).unwrap();// guaranteed to be canonical by
             // increment_unit
             if val > end {
                 break;
             }
-            ticks.labels.push((self.fmt(&counts), val))
+            ticks.labels.push((self.fmt_composite(&counts), val))
         }
         return ticks;
     }
@@ -284,7 +287,7 @@ impl Scale{
 #[derive(Debug)]
 struct Ticks {
     labels: Vec<(String, BaseNumType)>,// relative ticks
-    aux_labels: Vec<(String, BaseNumType)>,// for showing full formatted unit_counts values once in a while, so the user can know the absolute location
+    aux_labels: Vec<(String, BaseNumType)>,// for showing full formatted composite_unit values once in a while, so the user can know the absolute location
 }
 
 
@@ -301,20 +304,20 @@ struct Ticks {
 // 
 //     println!("町: {}", scale.get_unit("町").unwrap().size);
 //     println!("里: {}", scale.get_unit("里").unwrap().size);
-//     println!("{:?}", scale.to_unit_counts(3600));
-//     println!("{}", scale.fmt(&scale.to_unit_counts(3605)));
-//     println!("{}", scale.fmt(&scale.to_unit_counts(129600)));
-//     println!("{}", scale.fmt(&scale.to_unit_counts(12345678923)));
-//     // let mut counts = scale.to_unit_counts(1);
+//     println!("{:?}", scale.to_composite(3600));
+//     println!("{}", scale.fmt_base_unit(3605));
+//     println!("{}", scale.fmt_base_unit(129600));
+//     println!("{}", scale.fmt_base_unit(12345678923));
+//     // let mut counts = scale.to_composite(1);
 //     // for i in 0..1000000000 {
 //     //     if i%1000000 == 0 {
 //     //         println!("{}", scale.fmt(&counts));
 //     //     }
 //     //     counts = scale.increment_unit(&counts, 5, 1);
 //     // }
-//     println!("start: {}", scale.fmt(&scale.to_unit_counts(3000)));
+//     println!("start: {}", scale.fmt_base_unit(3000));
 //     println!("{:?}", scale.ticks(3000, 6000, 10));
-//     println!("end: {}", scale.fmt(&scale.to_unit_counts(6000)));
+//     println!("end: {}", scale.fmt_base_unit(6000));
 // }
 
 fn main() {
@@ -331,24 +334,24 @@ fn main() {
 
     println!("ms: {}", scale.get_unit("ms").unwrap().size);
     println!("d: {}", scale.get_unit("d").unwrap().size);
-    println!("{:?}", scale.to_unit_counts(3600));
-    println!("{}", scale.fmt(&scale.to_unit_counts(3605)));
-    println!("{}", scale.fmt(&scale.to_unit_counts(129600)));
-    println!("{}", scale.fmt(&scale.to_unit_counts(12345678923)));
-    // let mut counts = scale.to_unit_counts(1);
+    println!("{:?}", scale.to_composite(3600));
+    println!("{}", scale.fmt_base_unit(3605));
+    println!("{}", scale.fmt_base_unit(129600));
+    println!("{}", scale.fmt_base_unit(12345678923));
+    // let mut counts = scale.to_composite(1);
     // for i in 0..1000000000 {
     //     if i%1000000 == 0 {
     //         println!("{}", scale.fmt(&counts));
     //     }
     //     counts = scale.increment_unit(&counts, 5, 1);
     // }
-    println!("start: {}", scale.fmt(&scale.to_unit_counts(300000000000000000)));
+    println!("start: {}", scale.fmt_base_unit(300000000000000000));
     println!("{:?}", scale.ticks(300000000000000000, 600000000000000000, 10));
-    println!("end: {}", scale.fmt(&scale.to_unit_counts(600000000000000000)));
+    println!("end: {}", scale.fmt_base_unit(600000000000000000));
 }
 
 
-    // let mut scale = ScaleBuilder::new().to_unit_counts(|val|{
+    // let mut scale = ScaleBuilder::new().to_composite(|val|{
     //     let scale: Vec<u64> = Vec::new();
     //     let mut val = val.abs();
     //     // ps
