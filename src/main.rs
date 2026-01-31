@@ -1,6 +1,14 @@
 type BaseNumType = u64;
 type CompositeUnit = Vec<BaseNumType>;
 
+// impl CompositeUnit {
+//     fn zero_out_after(&mut self, idx: usize) {
+//         for let i in idx..self.len() {
+//             self[i] = 0;
+//         }
+//     }
+// }
+
 #[derive(Clone)]
 struct Unit{
     name: &'static str,
@@ -222,21 +230,22 @@ impl Scale{
         }
     }
     fn increment_unit(&self, composite_unit: &CompositeUnit, unit_index: usize, radix: BaseNumType) -> CompositeUnit{
-        let mut counts = composite_unit.clone();
+        let mut composite = composite_unit.clone();
+        // TODO: use the method
         for i in (unit_index+1)..composite_unit.len() {
-            counts[i] = 0;
+            composite[i] = 0;
         }
         let mut current_unit_index = unit_index;
-        counts[current_unit_index] += radix;
+        composite[current_unit_index] += radix;
         loop{
-            if self.is_unit_counts_canonical(&counts) {
+            if self.is_unit_counts_canonical(&composite) {
                 break;
             }
-            counts[current_unit_index] = 0;
+            composite[current_unit_index] = 0;
             current_unit_index -= 1;
-            counts[current_unit_index] += 1;
+            composite[current_unit_index] += 1;
         }
-        return counts;
+        return composite;
     }
     fn ticks(&self, start: BaseNumType, end: BaseNumType, max_cnt: usize) -> Ticks {
         if end <= start {
@@ -264,21 +273,25 @@ impl Scale{
                 radix = base_multiplier * factor;
             }
         }
-        let unit_start = self.to_composite(start);
-        let mut counts = unit_start.clone();
+        let composite_start = self.to_composite(start);
+        let mut composite = composite_start.clone();
         let mut ticks = Ticks{
             labels: Vec::new(),
             aux_labels: Vec::new(),
         };
-        counts[tick_unit_index] = radix_floor(counts[tick_unit_index], radix);
+        composite[tick_unit_index] = radix_floor(composite[tick_unit_index], radix);
+        // composite.zero_out_after(tick_unit_index + 1);
+        if composite == composite_start {
+
+        }
         loop {
-            counts = self.increment_unit(&counts, tick_unit_index, radix);
-            let val = self.from_composite(&counts).unwrap();// guaranteed to be canonical by
+            composite = self.increment_unit(&composite, tick_unit_index, radix);
+            let val = self.from_composite(&composite).unwrap();// guaranteed to be canonical by
             // increment_unit
             if val > end {
                 break;
             }
-            ticks.labels.push((self.fmt_composite(&counts), val))
+            ticks.labels.push((self.fmt_composite(&composite), val))
         }
         return ticks;
     }
@@ -308,12 +321,12 @@ struct Ticks {
 //     println!("{}", scale.fmt_base_unit(3605));
 //     println!("{}", scale.fmt_base_unit(129600));
 //     println!("{}", scale.fmt_base_unit(12345678923));
-//     // let mut counts = scale.to_composite(1);
+//     // let mut composite = scale.to_composite(1);
 //     // for i in 0..1000000000 {
 //     //     if i%1000000 == 0 {
-//     //         println!("{}", scale.fmt(&counts));
+//     //         println!("{}", scale.fmt(&composite));
 //     //     }
-//     //     counts = scale.increment_unit(&counts, 5, 1);
+//     //     composite = scale.increment_unit(&composite, 5, 1);
 //     // }
 //     println!("start: {}", scale.fmt_base_unit(3000));
 //     println!("{:?}", scale.ticks(3000, 6000, 10));
@@ -338,12 +351,12 @@ fn main() {
     println!("{}", scale.fmt_base_unit(3605));
     println!("{}", scale.fmt_base_unit(129600));
     println!("{}", scale.fmt_base_unit(12345678923));
-    // let mut counts = scale.to_composite(1);
+    // let mut composite = scale.to_composite(1);
     // for i in 0..1000000000 {
     //     if i%1000000 == 0 {
-    //         println!("{}", scale.fmt(&counts));
+    //         println!("{}", scale.fmt(&composite));
     //     }
-    //     counts = scale.increment_unit(&counts, 5, 1);
+    //     composite = scale.increment_unit(&composite, 5, 1);
     // }
     println!("start: {}", scale.fmt_base_unit(300000000000000000));
     println!("{:?}", scale.ticks(300000000000000000, 600000000000000000, 10));
