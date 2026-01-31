@@ -27,7 +27,7 @@ impl<'a> UnitBuilder<'a>{
             scale_builder: scale_builder,
             size: size,
             fmt_fn: None,
-            tick_base: vec![2,5],
+            tick_base: vec![2,5,10],
         };
     }
     fn name(&mut self, name: &'static str) -> &mut Self {
@@ -153,6 +153,11 @@ impl std::fmt::Display for ScaleError {
 }
 impl std::error::Error for ScaleError{}
 
+fn radix_floor(val: u64, radix: u64) -> u64{
+    let n = val/radix;
+    return radix*n;
+}
+
 impl Scale{
     fn get_unit(&self, name: &'static str) -> Option<&Unit>{
         for unit in self.units.iter() {
@@ -246,6 +251,7 @@ impl Scale{
         'outer: loop {
             let base_multiplier = radix;
             for factor in tick_unit.tick_base.clone().into_iter() {
+                println!("radix: {}", radix);
                 if radix * tick_unit.size > min_gap {
                     break 'outer;
                 }
@@ -258,6 +264,7 @@ impl Scale{
             labels: Vec::new(),
             aux_labels: Vec::new(),
         };
+        counts[tick_unit_index] = radix_floor(counts[tick_unit_index], radix);
         loop {
             counts = self.increment_unit(&counts, tick_unit_index, radix);
             let val = self.from_unit_counts(&counts).unwrap();// guaranteed to be canonical by
@@ -279,18 +286,48 @@ struct Ticks {
 
 
 
+// fn main() {
+//     let mut scale = ScaleBuilder::new("尺貫法")
+//         .unit(|u|u.name("寸"))
+//         .unit(|u|u.name("尺").relative_to_last(10))
+//         .unit(|u|u.name("丈").relative_to_last(10))
+//         .unit(|u|u.name("間").relative_to("尺", 6))
+//         .unit(|u|u.name("町").relative_to_last(60))
+//         .unit(|u|u.name("里").relative_to_last(36))
+//         .build();
+// 
+//     println!("町: {}", scale.get_unit("町").unwrap().size);
+//     println!("里: {}", scale.get_unit("里").unwrap().size);
+//     println!("{:?}", scale.to_unit_counts(3600));
+//     println!("{}", scale.fmt(&scale.to_unit_counts(3605)));
+//     println!("{}", scale.fmt(&scale.to_unit_counts(129600)));
+//     println!("{}", scale.fmt(&scale.to_unit_counts(12345678923)));
+//     // let mut counts = scale.to_unit_counts(1);
+//     // for i in 0..1000000000 {
+//     //     if i%1000000 == 0 {
+//     //         println!("{}", scale.fmt(&counts));
+//     //     }
+//     //     counts = scale.increment_unit(&counts, 5, 1);
+//     // }
+//     println!("start: {}", scale.fmt(&scale.to_unit_counts(3000)));
+//     println!("{:?}", scale.ticks(3000, 6000, 10));
+//     println!("end: {}", scale.fmt(&scale.to_unit_counts(6000)));
+// }
+
 fn main() {
-    let mut scale = ScaleBuilder::new("尺貫法")
-        .unit(|u|u.name("寸"))
-        .unit(|u|u.name("尺").relative_to_last(10))
-        .unit(|u|u.name("丈").relative_to_last(10))
-        .unit(|u|u.name("間").relative_to("尺", 6))
-        .unit(|u|u.name("町").relative_to_last(60))
-        .unit(|u|u.name("里").relative_to_last(36))
+    let mut scale = ScaleBuilder::new("time")
+        .unit(|u|u.name("ps"))
+        .unit(|u|u.name("ns").relative_to_last(1000))
+        .unit(|u|u.name("μs").relative_to_last(1000))
+        .unit(|u|u.name("ms").relative_to_last(1000))
+        .unit(|u|u.name("s").relative_to_last(1000))
+        .unit(|u|u.name("m").relative_to_last(60))
+        .unit(|u|u.name("h").relative_to_last(60))
+        .unit(|u|u.name("d").relative_to_last(24))
         .build();
 
-    println!("町: {}", scale.get_unit("町").unwrap().size);
-    println!("里: {}", scale.get_unit("里").unwrap().size);
+    println!("ms: {}", scale.get_unit("ms").unwrap().size);
+    println!("d: {}", scale.get_unit("d").unwrap().size);
     println!("{:?}", scale.to_unit_counts(3600));
     println!("{}", scale.fmt(&scale.to_unit_counts(3605)));
     println!("{}", scale.fmt(&scale.to_unit_counts(129600)));
@@ -302,9 +339,9 @@ fn main() {
     //     }
     //     counts = scale.increment_unit(&counts, 5, 1);
     // }
-    println!("start: {}", scale.fmt(&scale.to_unit_counts(3000)));
-    println!("{:?}", scale.ticks(3000, 6000, 10));
-    println!("end: {}", scale.fmt(&scale.to_unit_counts(6000)));
+    println!("start: {}", scale.fmt(&scale.to_unit_counts(300000000000000000)));
+    println!("{:?}", scale.ticks(300000000000000000, 600000000000000000, 10));
+    println!("end: {}", scale.fmt(&scale.to_unit_counts(600000000000000000)));
 }
 
 
