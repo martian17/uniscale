@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "uniscale"
+name = "nicer-ticks"
 version = "0.1.0"
